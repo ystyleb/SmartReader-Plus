@@ -17,6 +17,12 @@ const debug = {
     }
 };
 
+// 添加页面宽度设置相关的常量
+const MIN_CONTENT_WIDTH = 600;
+const MAX_CONTENT_WIDTH = 1200;
+const DEFAULT_CONTENT_WIDTH = 800;
+const WIDTH_STEP = 100;
+
 // 阅读时间估算函数
 function estimateReadingTime(text) {
     // 计算中文字符数
@@ -360,25 +366,192 @@ async function processImage(node) {
 }
 
 // 获取重定向后的图片URL
-async function getRedirectedImageUrl(url) {
-    try {
-        const response = await fetch(url, { method: 'HEAD', redirect: 'follow' });
-        return response.url;
-    } catch (error) {
-        debug.error('图片处理', '获取重定向URL失败:', error);
-        return url;
+async function getRedirectedImageUrl(url, retryCount = 3) {
+    for (let i = 0; i < retryCount; i++) {
+        try {
+            const response = await fetch(url, { method: 'HEAD', redirect: 'follow' });
+            if (response.ok) {
+                return response.url;
+            }
+            debug.warn('图片处理', `第${i + 1}次获取重定向URL失败，状态码:`, response.status);
+        } catch (error) {
+            debug.error('图片处理', `第${i + 1}次获取重定向URL失败:`, error);
+            if (i === retryCount - 1) {
+                // 尝试生成备用URL
+                const backupUrl = generateBackupImageUrl(url);
+                if (backupUrl !== url) {
+                    debug.log('图片处理', '使用备用URL:', backupUrl);
+                    return backupUrl;
+                }
+                return url;
+            }
+            // 重试前等待一段时间
+            await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+        }
     }
+    return url;
+}
+
+// 生成备用图片URL
+function generateBackupImageUrl(url) {
+    try {
+        const urlObj = new URL(url);
+        
+        // 处理腾讯文档系统的图片
+        if (url.includes('km.woa.com/asset')) {
+            // 尝试使用不同的CDN域名
+            const cdnDomains = [
+                'cdn.woa.com',
+                'img.woa.com',
+                'static.woa.com'
+            ];
+            
+            for (const domain of cdnDomains) {
+                if (!url.includes(domain)) {
+                    return url.replace(urlObj.hostname, domain);
+                }
+            }
+        }
+        
+        // 处理其他常见图片托管服务
+        if (url.includes('i.imgur.com')) {
+            return url.replace('i.imgur.com', 'imgur.com');
+        }
+        
+        if (url.includes('images.unsplash.com')) {
+            return url.replace('images.unsplash.com', 'unsplash.com');
+        }
+    } catch (error) {
+        debug.error('图片处理', '生成备用URL失败:', error);
+    }
+    
+    return url;
+}
+
+// 从 chrome.storage 中获取保存的宽度设置
+async function getSavedWidth() {
+    const result = await chrome.storage.sync.get('contentWidth');
+    return result.contentWidth || DEFAULT_CONTENT_WIDTH;
+}
+
+// 保存宽度设置到 chrome.storage
+async function saveWidth(width) {
+    await chrome.storage.sync.set({ contentWidth: width });
+}
+
+// 从 chrome.storage 中获取保存的字体大小设置
+async function getSavedFontSize() {
+    const result = await chrome.storage.sync.get('fontSize');
+    return result.fontSize || 16;
+}
+
+// 保存字体大小设置到 chrome.storage
+async function saveFontSize(size) {
+    await chrome.storage.sync.set({ fontSize: size });
+}
+
+// 保存阅读进度
+async function saveReadingProgress(url, position, title) {
+    const progress = {
+        url,
+        position,
+        title,
+        timestamp: Date.now()
+    };
+    await chrome.storage.sync.set({ [`reading_progress_${url}`]: progress });
+    debug.log('阅读进度', '保存进度:', progress);
+}
+
+// 获取保存的阅读进度
+async function getSavedProgress(url) {
+    const result = await chrome.storage.sync.get(`reading_progress_${url}`);
+    return result[`reading_progress_${url}`] || null;
+}
+
+// 恢复阅读进度
+async function restoreReadingProgress(container) {
+    const url = window.location.href;
+    const progress = await getSavedProgress(url);
+    
+    if (progress) {
+        debug.log('阅读进度', '恢复进度:', progress);
+        container.scrollTo(0, progress.position);
+        // 显示提示
+        showProgressRestoreToast(progress);
+    }
+}
+
+// 显示进度恢复提示
+function showProgressRestoreToast(progress) {
+    const toast = document.createElement('div');
+    toast.className = 'progress-restore-toast';
+    const minutes = Math.round((Date.now() - progress.timestamp) / 1000 / 60);
+    toast.innerHTML = `
+        <div class="toast-content">
+            <span>已恢复到上次阅读位置</span>
+            <small>${minutes}分钟前</small>
+        </div>
+    `;
+    document.body.appendChild(toast);
+    
+    // 3秒后自动消失
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// 监听滚动事件，自动保存进度
+function initProgressTracking(container) {
+    let saveTimeout;
+    container.addEventListener('scroll', () => {
+        if (saveTimeout) clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(() => {
+            const position = container.scrollTop;
+            const url = window.location.href;
+            const title = document.title;
+            saveReadingProgress(url, position, title);
+        }, 1000); // 延迟1秒保存，避免频繁保存
+    });
 }
 
 // 启用阅读模式
 async function enableReadingMode(contentElement) {
     if (!contentElement) return;
 
+    // 检查是否是腾讯文档系统
+    const isKMArticle = window.location.hostname.includes('km.woa.com');
+    
     // 提取文章标题
     const title = document.title || '';
     
     // 提取文章内容
-    const content = await extractContent(contentElement);
+    let content;
+    if (isKMArticle) {
+        debug.log('阅读模式', '检测到腾讯文档系统页面，使用特殊处理');
+        // 克隆内容元素以进行处理
+        const clonedElement = contentElement.cloneNode(true);
+        
+        // 移除水印相关元素
+        const watermarks = clonedElement.querySelectorAll('.watermark');
+        watermarks.forEach(wm => wm.remove());
+        
+        // 处理图片元素
+        const imgElements = clonedElement.querySelectorAll('img');
+        imgElements.forEach(img => {
+            const dataSrc = img.getAttribute('data-src');
+            if (dataSrc && !img.src) {
+                img.src = dataSrc;
+            }
+            // 确保图片可见
+            img.style.display = 'block';
+            img.style.opacity = '1';
+        });
+        
+        content = clonedElement.innerHTML;
+    } else {
+        content = await extractContent(contentElement);
+    }
     
     // 打印调试信息
     debug.log('启用阅读模式', {
@@ -387,16 +560,28 @@ async function enableReadingMode(contentElement) {
         内容元素类名: contentElement.className,
         内容元素ID: contentElement.id,
         原始内容长度: contentElement.innerText.length,
-        处理后内容长度: content.length
+        处理后内容长度: content.length,
+        是否腾讯文档: isKMArticle
     });
 
     const readingContainer = document.createElement('div');
     readingContainer.className = 'smartreader-reading-mode';
+    
+    // 获取保存的宽度设置
+    const savedWidth = await getSavedWidth();
+    document.documentElement.style.setProperty('--content-width', `${savedWidth}px`);
+
     readingContainer.innerHTML = `
         <div class="reading-mode-toolbar">
             <div class="reading-mode-toolbar-inner">
                 <button id="exit-reading-mode">退出阅读模式</button>
                 <div class="reading-controls">
+                    <div class="width-controls">
+                        <button id="decrease-width" title="减小宽度">➖</button>
+                        <span class="width-value">${savedWidth}px</span>
+                        <button id="increase-width" title="增加宽度">➕</button>
+                    </div>
+                    <div class="separator"></div>
                     <button id="increase-font">放大字体</button>
                     <button id="decrease-font">缩小字体</button>
                 </div>
@@ -470,11 +655,42 @@ async function enableReadingMode(contentElement) {
         h2.forEach(h => h.style.fontSize = `${size * 1.5}px`);
         const h3 = articleContent.querySelectorAll('h3');
         h3.forEach(h => h.style.fontSize = `${size * 1.25}px`);
-        console.log('字体大小已更新为:', size);
+        saveFontSize(size);
+        debug.log('字体大小', `字体大小已更新为: ${size}px`);
     }
 
     // 初始化字体大小
+    const savedFontSize = await getSavedFontSize();
+    currentFontSize = savedFontSize;
     updateFontSize(currentFontSize);
+
+    // 宽度调节功能
+    let currentWidth = savedWidth;
+    const widthValue = readingContainer.querySelector('.width-value');
+    
+    // 更新宽度的函数
+    function updateWidth(width) {
+        if (width >= MIN_CONTENT_WIDTH && width <= MAX_CONTENT_WIDTH) {
+            currentWidth = width;
+            document.documentElement.style.setProperty('--content-width', `${width}px`);
+            widthValue.textContent = `${width}px`;
+            saveWidth(width);
+            debug.log('宽度调节', `页面宽度已更新为: ${width}px`);
+        }
+    }
+    
+    // 绑定宽度调节事件
+    readingContainer.querySelector('#decrease-width').addEventListener('click', () => {
+        if (currentWidth > MIN_CONTENT_WIDTH) {
+            updateWidth(currentWidth - WIDTH_STEP);
+        }
+    });
+    
+    readingContainer.querySelector('#increase-width').addEventListener('click', () => {
+        if (currentWidth < MAX_CONTENT_WIDTH) {
+            updateWidth(currentWidth + WIDTH_STEP);
+        }
+    });
     
     // 绑定退出按钮事件
     document.getElementById('exit-reading-mode').addEventListener('click', () => {
@@ -503,11 +719,11 @@ async function enableReadingMode(contentElement) {
     // 开始计时
     startReadingTimer();
     
-    // 平滑滚动到顶部
-    readingContainer.scrollTo({
-        top: 0,
-        behavior: 'smooth'
-    });
+    // 初始化进度跟踪
+    initProgressTracking(readingContainer);
+    
+    // 恢复阅读进度或滚动到顶部
+    await restoreReadingProgress(readingContainer);
 
     // 添加退出阅读模式的快捷键
     document.addEventListener('keydown', function(e) {
@@ -843,9 +1059,13 @@ function createElementSelector() {
     function updateHighlight(element) {
         if (!element || !highlightElement) return;
         const rect = element.getBoundingClientRect();
+        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+        
         highlightElement.style.display = 'block';
-        highlightElement.style.top = `${rect.top}px`;
-        highlightElement.style.left = `${rect.left}px`;
+        highlightElement.style.position = 'absolute';
+        highlightElement.style.top = `${rect.top + scrollTop}px`;
+        highlightElement.style.left = `${rect.left + scrollLeft}px`;
         highlightElement.style.width = `${rect.width}px`;
         highlightElement.style.height = `${rect.height}px`;
     }
@@ -951,4 +1171,4 @@ function createElementSelector() {
 }
 
 // 启动初始化
-initialize(); 
+initialize();
