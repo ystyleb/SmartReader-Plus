@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            width: 300px;
+            padding: 15px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        
+        h2 {
+            margin: 0 0 15px 0;
+            color: #333;
+            font-size: 18px;
+        }
+        
+        .section {
+            margin-bottom: 20px;
+        }
+        
+        .setting-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .setting-item label {
+            flex: 1;
+            color: #666;
+        }
+        
+        .api-key-input {
+            width: 100%;
+            padding: 8px;
+            margin-top: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        button {
+            background: #007AFF;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
+        }
+        
+        button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <h2>SmartReader+ 设置</h2>
+    
+    <div class="section">
+        <div class="setting-item">
+            <label>启用阅读模式</label>
+            <input type="checkbox" id="reading-mode-enabled">
+        </div>
+        <div class="setting-item">
+            <label>自动保存提示</label>
+            <input type="checkbox" id="auto-save-prompt">
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="setting-item">
+            <label>启用 Pocket</label>
+            <input type="checkbox" id="pocket-enabled">
+        </div>
+        <input type="password" class="api-key-input" id="pocket-api-key" placeholder="Pocket API Key">
+    </div>
+    
+    <div class="section">
+        <div class="setting-item">
+            <label>启用 Readwise</label>
+            <input type="checkbox" id="readwise-enabled">
+        </div>
+        <input type="password" class="api-key-input" id="readwise-api-key" placeholder="Readwise API Key">
+    </div>
+    
+    <button id="save-settings">保存设置</button>
+    
+    <script src="popup.js"></script>
+</body>
+</html> 

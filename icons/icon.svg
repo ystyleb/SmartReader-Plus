@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+    <!-- 背景圆形 -->
+    <circle cx="64" cy="64" r="60" fill="#007AFF"/>
+    
+    <!-- 书本形状 -->
+    <path d="M 40 38
+             L 40 90
+             Q 40 94, 44 94
+             L 84 94
+             Q 88 94, 88 90
+             L 88 38
+             Q 88 34, 84 34
+             L 44 34
+             Q 40 34, 40 38
+             Z" 
+          fill="white"/>
+    
+    <!-- 书页线条 -->
+    <path d="M 48 48 L 80 48" stroke="#007AFF" stroke-width="4" stroke-linecap="round"/>
+    <path d="M 48 60 L 80 60" stroke="#007AFF" stroke-width="4" stroke-linecap="round"/>
+    <path d="M 48 72 L 80 72" stroke="#007AFF" stroke-width="4" stroke-linecap="round"/>
+    <path d="M 48 84 L 70 84" stroke="#007AFF" stroke-width="4" stroke-linecap="round"/>
+    
+    <!-- 智能标记 -->
+    <circle cx="95" cy="33" r="15" fill="#28a745"/>
+    <text x="95" y="39" font-family="Arial" font-size="16" fill="white" text-anchor="middle">+</text>
+</svg> 

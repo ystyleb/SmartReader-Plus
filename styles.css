@@ -1,0 +1,288 @@
+.smartreader-prompt,
+.smartreader-save-prompt {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+    z-index: 999999;
+    width: 300px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.smartreader-prompt-content {
+    text-align: center;
+}
+
+.smartreader-prompt-content h3 {
+    margin: 0 0 10px 0;
+    color: #333;
+    font-size: 18px;
+}
+
+.smartreader-prompt-content p {
+    margin: 0 0 15px 0;
+    color: #666;
+    font-size: 14px;
+}
+
+.smartreader-prompt-content button {
+    background: #007AFF;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    margin: 0 5px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.2s;
+}
+
+.smartreader-prompt-content button:hover {
+    background: #0056b3;
+}
+
+.smartreader-prompt-content button#dismiss-prompt,
+.smartreader-prompt-content button#dismiss-save {
+    background: #f1f1f1;
+    color: #333;
+}
+
+.smartreader-prompt-content button#dismiss-prompt:hover,
+.smartreader-prompt-content button#dismiss-save:hover {
+    background: #ddd;
+}
+
+.smartreader-reading-mode {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: #f8f7f5;
+    z-index: 999999;
+    transform: translateY(100%);
+    transition: transform 0.4s ease-out;
+    overflow-y: overlay;
+    -webkit-overflow-scrolling: touch;
+}
+
+.smartreader-reading-mode.active {
+    transform: translateY(0);
+}
+
+.smartreader-reading-mode.exit {
+    transform: translateY(-100%);
+}
+
+/* 自定义滚动条样式 */
+.smartreader-reading-mode::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.smartreader-reading-mode::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.smartreader-reading-mode::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+}
+
+.smartreader-reading-mode::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.smartreader-reading-mode.dark-mode::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.smartreader-reading-mode.dark-mode::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.reading-mode-content {
+    max-width: 800px;
+    margin: 0 auto;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.8;
+    color: #333;
+    padding: 0 20px;
+    padding-bottom: 100px;
+}
+
+.reading-mode-toolbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: rgba(248, 247, 245, 0.98);
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+.reading-mode-toolbar::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -20px;
+    height: 20px;
+    background: linear-gradient(to bottom, rgba(250, 249, 247, 1), rgba(250, 249, 247, 0));
+    pointer-events: none;
+}
+
+.reading-mode-toolbar-inner {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 0 20px;
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.reading-controls {
+    display: flex;
+    gap: 8px;
+}
+
+.reading-mode-toolbar button {
+    background: transparent;
+    color: #333;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+.reading-mode-toolbar button:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+#exit-reading-mode {
+    color: #666;
+}
+
+#exit-reading-mode:hover {
+    color: #333;
+}
+
+.article-content {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 60px 20px;
+    line-height: 1.8;
+    color: #333;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.article-title {
+    font-weight: 600;
+    line-height: 1.4;
+    margin: 0 0 40px 0;
+    color: #000;
+}
+
+.article-content p {
+    margin: 0 0 1.2em 0;
+    color: #333;
+    line-height: 1.8;
+}
+
+.article-content h1,
+.article-content h2,
+.article-content h3,
+.article-content h4,
+.article-content h5,
+.article-content h6 {
+    margin: 2em 0 1em;
+    line-height: 1.4;
+    font-weight: 600;
+    color: #000;
+}
+
+.article-content h2 { font-size: 24px; }
+.article-content h3 { font-size: 20px; }
+.article-content h4 { font-size: 18px; }
+
+.article-content figure {
+    margin: 2em 0;
+    text-align: center;
+}
+
+.article-content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+}
+
+.article-content ul,
+.article-content ol {
+    margin: 1.2em 0;
+    padding-left: 2em;
+}
+
+.article-content li {
+    margin: 0.5em 0;
+    color: #333;
+}
+
+.article-content blockquote {
+    margin: 2em 0;
+    padding: 1em 1.5em;
+    border-left: 4px solid rgba(0, 0, 0, 0.1);
+    background: rgba(0, 0, 0, 0.02);
+    color: #666;
+    font-style: normal;
+}
+
+.article-content pre,
+.article-content code {
+    font-family: "SF Mono", Consolas, Monaco, 'Andale Mono', monospace;
+    background: #f8f8f8;
+    padding: 0.2em 0.4em;
+    border-radius: 4px;
+    font-size: 0.9em;
+    color: #333;
+}
+
+.article-content pre {
+    padding: 1em;
+    overflow-x: auto;
+    background: #f8f8f8;
+    border: 1px solid #eee;
+    border-radius: 6px;
+}
+
+/* 链接样式 */
+.article-content a {
+    color: #0366d6;
+    text-decoration: none;
+    border-bottom: 1px solid rgba(3, 102, 214, 0.2);
+    transition: all 0.2s;
+}
+
+.article-content a:hover {
+    border-bottom-color: #0366d6;
+}
+
+.smartreader-reading-mode.dark-mode .article-content a {
+    color: #58a6ff;
+    border-bottom-color: rgba(88, 166, 255, 0.2);
+}
+
+.smartreader-reading-mode.dark-mode .article-content a:hover {
+    border-bottom-color: #58a6ff;
+} 
