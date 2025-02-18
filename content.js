@@ -1,3 +1,22 @@
+// 添加调试工具
+const debug = {
+    log: function(category, ...args) {
+        console.log(`[SmartReader+][${category}]`, ...args);
+    },
+    error: function(category, ...args) {
+        console.error(`[SmartReader+][${category}]`, ...args);
+    },
+    warn: function(category, ...args) {
+        console.warn(`[SmartReader+][${category}]`, ...args);
+    },
+    group: function(category) {
+        console.group(`[SmartReader+][${category}]`);
+    },
+    groupEnd: function() {
+        console.groupEnd();
+    }
+};
+
 // 阅读时间估算函数
 function estimateReadingTime(text) {
     // 计算中文字符数
@@ -31,39 +50,99 @@ function getMainContent() {
     const isKMArticle = window.location.hostname.includes('km.woa.com');
     
     if (isKMArticle) {
+        debug.log('检测', '检测到腾讯文档系统页面');
+        
         // 针对腾讯文档系统的特殊处理
-        const articleContent = document.querySelector('#km-container > div.app-container > div.article-show-container > div.article-show-wrapper > div > div.article-present-wrapper > div.article-main');
+        const articleContent = document.querySelector('div[data-v-6ebdecf7][class="reader-container"]');
         
         if (articleContent) {
+            debug.log('检测', '找到文章内容容器');
+            
+            // 等待图片加载完成
+            const images = articleContent.querySelectorAll('img');
+            debug.log('图片处理', `找到 ${images.length} 张图片`);
+            
+            images.forEach(img => {
+                const dataSrc = img.getAttribute('data-src');
+                if (dataSrc && !img.src) {
+                    debug.log('图片处理', '加载图片:', {
+                        'data-src': dataSrc,
+                        当前src: img.src || '无'
+                    });
+                    img.src = dataSrc;
+                }
+            });
+            
             // 过滤掉不需要的内容
             const filteredContent = Array.from(articleContent.children).filter(child => {
-                // 排除二维码、头像等元素
-                if (child.querySelector('img')) return false;
-                // 排除更新时间、标签等元数据
-                if (child.textContent.includes('更新于:') || 
-                    child.textContent.includes('标签:') ||
-                    child.textContent.includes('微信扫一扫赞赏') ||
-                    child.textContent.includes('人已赞赏') ||
-                    child.textContent.includes('最近访问此文') ||
-                    child.textContent.includes('我顶') ||
-                    child.textContent.includes('收藏') ||
-                    child.textContent.includes('已转载') ||
-                    child.textContent.includes('暂未转载') ||
-                    child.textContent.includes('转载到') ||
-                    child.textContent.includes('未加入K吧')) {
-                    return false;
-                }
-                return true;
+                // 排除特定的元素
+                if (child.classList.contains('watermark')) return false;
+                if (child.classList.contains('custom-user-info')) return false;
+                
+                // 保留主要内容
+                if (child.classList.contains('km-view-content')) return true;
+                
+                return false;
             });
 
             // 创建一个新的容器来存放过滤后的内容
             const container = document.createElement('div');
-            filteredContent.forEach(element => container.appendChild(element.cloneNode(true)));
+            filteredContent.forEach(element => {
+                try {
+                    const clone = element.cloneNode(true);
+                    
+                    // 移除水印相关元素
+                    const watermarks = clone.querySelectorAll('.watermark');
+                    watermarks.forEach(wm => wm.remove());
+                    
+                    // 处理图片元素
+                    const imgElements = clone.querySelectorAll('img');
+                    debug.log('图片处理', `处理克隆节点中的 ${imgElements.length} 张图片`);
+                    
+                    imgElements.forEach(img => {
+                        try {
+                            // 复制原始图片的所有属性
+                            const dataSrc = img.getAttribute('data-src');
+                            const originalImg = element.querySelector(`img[data-src="${dataSrc}"]`);
+                            
+                            if (originalImg) {
+                                debug.log('图片处理', '复制图片属性:', {
+                                    'data-src': dataSrc,
+                                    '原始src': originalImg.src || '无',
+                                    '是否已加载': !!originalImg.src
+                                });
+                                
+                                // 复制已加载图片的src
+                                if (originalImg.src) {
+                                    img.src = originalImg.src;
+                                }
+                                
+                                // 复制计算后的样式
+                                const computedStyle = window.getComputedStyle(originalImg);
+                                img.style.cssText = computedStyle.cssText;
+                                
+                                // 确保图片可见
+                                img.style.display = 'block';
+                                img.style.opacity = '1';
+                            } else {
+                                debug.warn('图片处理', '未找到原始图片:', dataSrc);
+                            }
+                        } catch (error) {
+                            debug.error('图片处理', '处理单个图片时出错:', error);
+                        }
+                    });
+                    
+                    container.appendChild(clone);
+                } catch (error) {
+                    debug.error('内容处理', '处理内容元素时出错:', error);
+                }
+            });
 
-            console.log('找到腾讯文档文章内容元素:', {
+            debug.log('检测', '内容处理完成', {
                 原始内容长度: articleContent.innerText.length,
                 过滤后内容长度: container.innerText.length,
-                过滤后内容预览: container.innerText.substring(0, 200) + '...'
+                过滤后内容预览: container.innerText.substring(0, 200) + '...',
+                图片数量: container.querySelectorAll('img').length
             });
 
             return {
@@ -192,9 +271,13 @@ function createReadingModePrompt(defaultContent) {
         <div class="smartreader-prompt-content">
             <h3>检测到较长文章</h3>
             <p>是否切换到阅读模式以获得更好的阅读体验？</p>
-            <button id="enable-reading-mode">开启阅读模式</button>
-            <button id="select-content">选择内容</button>
-            <button id="dismiss-prompt">暂不需要</button>
+            <div class="button-container">
+                <button id="enable-reading-mode" class="primary-button">开启阅读模式</button>
+                <div class="secondary-buttons">
+                    <button id="select-content">选择内容</button>
+                    <button id="dismiss-prompt">暂不需要</button>
+                </div>
+            </div>
         </div>
     `;
     document.body.appendChild(prompt);
@@ -234,18 +317,71 @@ function createSavePrompt() {
     document.getElementById('dismiss-save').addEventListener('click', () => prompt.remove());
 }
 
+// 处理图片
+async function processImage(node) {
+    if (node.closest('.watermark')) return '';
+    
+    // 收集所有图片属性
+    const attributes = Array.from(node.attributes).reduce((attrs, attr) => {
+        if (attr.name === 'src' || attr.name === 'data-src') {
+            const url = attr.value;
+            // 处理腾讯文档系统的图片URL
+            if (url && url.includes('km.woa.com/asset')) {
+                attrs['data-original-src'] = url; // 保存原始URL
+                attrs['data-km-url'] = url; // 标记为腾讯文档图片
+            } else if (url && !url.startsWith('http')) {
+                attrs['src'] = new URL(url, window.location.href).href;
+            } else {
+                attrs['src'] = url;
+            }
+        } else if (attr.name === 'style') {
+            attrs['style'] = attr.value;
+        } else if (attr.name === 'class') {
+            attrs['class'] = attr.value;
+        } else if (attr.name.startsWith('data-')) {
+            // 保留所有 data- 属性
+            attrs[attr.name] = attr.value;
+        } else if (attr.name === 'width' || attr.name === 'height') {
+            // 保留宽高属性
+            attrs[attr.name] = attr.value;
+        }
+        return attrs;
+    }, {});
+    
+    // 构建属性字符串，移除 data-no-src 属性
+    const attrString = Object.entries(attributes)
+        .filter(([key]) => key !== 'data-no-src')
+        .map(([key, value]) => `${key}="${value}"`)
+        .join(' ');
+    
+    // 创建图片容器，保持原始样式
+    const containerStyle = node.parentElement?.getAttribute('style') || 'text-align: center; margin: 1em 0;';
+    return `<div style="${containerStyle}"><img ${attrString} loading="lazy" /></div>\n`;
+}
+
+// 获取重定向后的图片URL
+async function getRedirectedImageUrl(url) {
+    try {
+        const response = await fetch(url, { method: 'HEAD', redirect: 'follow' });
+        return response.url;
+    } catch (error) {
+        debug.error('图片处理', '获取重定向URL失败:', error);
+        return url;
+    }
+}
+
 // 启用阅读模式
-function enableReadingMode(contentElement) {
+async function enableReadingMode(contentElement) {
     if (!contentElement) return;
 
     // 提取文章标题
     const title = document.title || '';
     
     // 提取文章内容
-    const content = extractContent(contentElement);
+    const content = await extractContent(contentElement);
     
     // 打印调试信息
-    console.log('启用阅读模式:', {
+    debug.log('启用阅读模式', {
         标题: title,
         内容元素: contentElement,
         内容元素类名: contentElement.className,
@@ -275,6 +411,41 @@ function enableReadingMode(contentElement) {
     `;
     
     document.body.appendChild(readingContainer);
+    
+    // 处理图片加载
+    const images = readingContainer.querySelectorAll('img[data-km-url]');
+    for (const img of images) {
+        const kmUrl = img.getAttribute('data-km-url');
+        if (kmUrl) {
+            try {
+                // 获取重定向后的URL
+                const redirectedUrl = await getRedirectedImageUrl(kmUrl);
+                debug.log('图片处理', '获取到重定向URL:', {
+                    原始URL: kmUrl,
+                    重定向URL: redirectedUrl
+                });
+                
+                // 创建一个新的图片元素来预加载
+                const preloadImg = new Image();
+                preloadImg.onload = () => {
+                    img.src = redirectedUrl;
+                    img.style.opacity = '1';
+                    debug.log('图片处理', '图片加载成功:', redirectedUrl);
+                };
+                preloadImg.onerror = () => {
+                    debug.error('图片处理', '图片加载失败:', redirectedUrl);
+                    img.style.display = 'none';
+                };
+                preloadImg.src = redirectedUrl;
+                
+                // 添加加载动画
+                img.style.opacity = '0';
+                img.style.transition = 'opacity 0.3s ease';
+            } catch (error) {
+                debug.error('图片处理', '处理图片失败:', error);
+            }
+        }
+    }
     
     // 触发进入动画
     requestAnimationFrame(() => {
@@ -352,12 +523,12 @@ function enableReadingMode(contentElement) {
 }
 
 // 提取文章内容
-function extractContent(element) {
+async function extractContent(element) {
     let content = '';
     let debugContent = ''; // 用于调试的纯文本内容
     
     // 递归处理节点
-    function processNode(node) {
+    async function processNode(node) {
         // 跳过不需要的元素
         if (node.nodeType === Node.ELEMENT_NODE) {
             const tagName = node.tagName.toLowerCase();
@@ -365,14 +536,11 @@ function extractContent(element) {
                 return;
             }
             
-            // 跳过广告、分享按钮等
+            // 跳过水印和用户信息
             const className = (node.className || '').toString();
             if (className && (
-                className.includes('ad') || 
-                className.includes('advertisement') || 
-                className.includes('social') || 
-                className.includes('share') || 
-                className.includes('comment')
+                className.includes('watermark') || 
+                className.includes('custom-user-info')
             )) {
                 return;
             }
@@ -383,16 +551,15 @@ function extractContent(element) {
             const text = node.textContent.trim();
             if (text) {
                 debugContent += text + '\n';
-                const parentTag = node.parentElement ? node.parentElement.tagName.toLowerCase() : '';
+                const parentElement = node.parentElement;
                 
-                // 根据父元素类型处理文本
-                if (['p', 'div', 'article', 'section'].includes(parentTag)) {
-                    content += `<p>${text}</p>\n`;
-                } else if (['li'].includes(parentTag)) {
-                    // 列表项内的文本不需要额外包装
-                    content += text;
-                } else if (!['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote'].includes(parentTag)) {
-                    // 其他普通文本节点
+                // 如果父元素是 p 标签，直接返回，让父元素处理
+                if (parentElement && parentElement.tagName.toLowerCase() === 'p') {
+                    return;
+                }
+                
+                // 处理独立文本节点
+                if (!['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 'pre', 'code'].includes(parentElement?.tagName.toLowerCase())) {
                     content += `<p>${text}</p>\n`;
                 }
             }
@@ -402,62 +569,89 @@ function extractContent(element) {
         // 处理元素节点
         if (node.nodeType === Node.ELEMENT_NODE) {
             const tagName = node.tagName.toLowerCase();
+            const className = (node.className || '').toString();
             
-            // 保留标题标签
+            // 处理段落
+            if (tagName === 'p' || className.includes('km-view-content')) {
+                // 保留原始样式
+                const style = node.getAttribute('style') || '';
+                const classNames = node.getAttribute('class') || '';
+                content += `<p${style ? ` style="${style}"` : ''}${classNames ? ` class="${classNames}"` : ''}>${node.innerHTML}</p>\n`;
+                return;
+            }
+            
+            // 处理标题
             if (['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tagName)) {
-                const headingText = node.textContent.trim();
-                if (headingText) {
-                    content += `<${tagName}>${headingText}</${tagName}>\n`;
-                }
+                const style = node.getAttribute('style') || '';
+                const classNames = node.getAttribute('class') || '';
+                const headingText = node.innerHTML; // 使用 innerHTML 保留格式
+                content += `<${tagName}${style ? ` style="${style}"` : ''}${classNames ? ` class="${classNames}"` : ''}>${headingText}</${tagName}>\n`;
                 return;
             }
             
-            // 保留图片
-            if (tagName === 'img' && node.src) {
-                content += `<figure><img src="${node.src}" alt="${node.alt || ''}" /></figure>\n`;
+            // 处理图片
+            if (tagName === 'img') {
+                // 直接使用已加载的图片
+                const computedStyle = window.getComputedStyle(node);
+                const containerStyle = node.parentElement?.getAttribute('style') || 'text-align: center; margin: 1em 0;';
+                content += `<div style="${containerStyle}"><img src="${node.src}" style="${computedStyle.cssText}" /></div>\n`;
                 return;
             }
             
-            // 保留列表
+            // 处理列表
             if (tagName === 'ul' || tagName === 'ol') {
-                const listItems = Array.from(node.children)
+                const style = node.getAttribute('style') || '';
+                const classNames = node.getAttribute('class') || '';
+                const listItems = await Promise.all(Array.from(node.children)
                     .filter(child => child.tagName.toLowerCase() === 'li')
-                    .map(li => `<li>${li.textContent.trim()}</li>`)
-                    .join('\n');
-                if (listItems) {
-                    content += `<${tagName}>\n${listItems}\n</${tagName}>\n`;
+                    .map(async li => {
+                        const liStyle = li.getAttribute('style') || '';
+                        const liClassNames = li.getAttribute('class') || '';
+                        return `<li${liStyle ? ` style="${liStyle}"` : ''}${liClassNames ? ` class="${liClassNames}"` : ''}>${li.innerHTML}</li>`;
+                    }));
+                if (listItems.length > 0) {
+                    content += `<${tagName}${style ? ` style="${style}"` : ''}${classNames ? ` class="${classNames}"` : ''}>\n${listItems.join('\n')}\n</${tagName}>\n`;
                 }
                 return;
             }
             
-            // 保留引用
+            // 处理引用
             if (tagName === 'blockquote') {
-                const quoteText = node.textContent.trim();
-                if (quoteText) {
-                    content += `<blockquote>${quoteText}</blockquote>\n`;
-                }
+                const style = node.getAttribute('style') || '';
+                const classNames = node.getAttribute('class') || '';
+                content += `<blockquote${style ? ` style="${style}"` : ''}${classNames ? ` class="${classNames}"` : ''}>${node.innerHTML}</blockquote>\n`;
                 return;
             }
             
-            // 保留代码块
+            // 处理代码块
             if (tagName === 'pre' || tagName === 'code') {
-                const codeText = node.textContent.trim();
-                if (codeText) {
-                    content += `<pre><code>${codeText}</code></pre>\n`;
-                }
+                const style = node.getAttribute('style') || '';
+                const classNames = node.getAttribute('class') || '';
+                content += `<${tagName}${style ? ` style="${style}"` : ''}${classNames ? ` class="${classNames}"` : ''}>${node.innerHTML}</${tagName}>\n`;
+                return;
+            }
+            
+            // 处理 span 和其他内联元素
+            if (['span', 'strong', 'em', 'b', 'i', 'u', 'a'].includes(tagName)) {
+                const style = node.getAttribute('style') || '';
+                const classNames = node.getAttribute('class') || '';
+                const href = tagName === 'a' ? ` href="${node.getAttribute('href')}"` : '';
+                content += `<${tagName}${style ? ` style="${style}"` : ''}${classNames ? ` class="${classNames}"` : ''}${href}>${node.innerHTML}</${tagName}>`;
                 return;
             }
             
             // 递归处理子节点
-            node.childNodes.forEach(processNode);
+            for (const childNode of node.childNodes) {
+                await processNode(childNode);
+            }
         }
     }
     
     // 处理根元素
-    processNode(element);
+    await processNode(element);
     
     // 打印提取的内容摘要
-    console.log('提取的内容摘要:', {
+    debug.log('内容提取', {
         原始元素: element.tagName,
         原始元素类名: element.className,
         原始文本长度: element.textContent.length,
@@ -503,7 +697,7 @@ function checkReadingDuration() {
 
 // 初始化
 function initialize() {
-    console.log('SmartReader+ 初始化中...');
+    debug.log('初始化', 'SmartReader+ 初始化中...');
     
     // 等待页面加载完成
     if (document.readyState === 'complete') {
@@ -515,61 +709,60 @@ function initialize() {
 
 // 等待内容加载
 function waitForContent() {
-    console.log('等待内容加载...');
-    
-    // 检查是否是腾讯文档系统
-    const isKMArticle = window.location.hostname.includes('km.woa.com');
+    debug.log('初始化', '等待内容加载...');
     
     // 初始延迟，等待可能的动态内容加载
     setTimeout(() => {
         // 检查内容是否已加载
-        const checkContent = () => {
-            // 针对腾讯文档系统的特殊处理
-            if (isKMArticle) {
-                const articleContent = document.querySelector('#km-container > div.app-container > div.article-show-container > div.article-show-wrapper > div > div.article-present-wrapper > div.article-main');
-                
-                if (articleContent && articleContent.textContent.trim()) {
-                    console.log('找到腾讯文档文章内容');
-                    startDetection();
-                    return;
-                }
-                
-                console.log('腾讯文档内容还未找到，等待后重试...');
-                setTimeout(checkContent, 1000);
-                return;
-            }
-            
-            const content = getMainContent();
-            if (content.text.length < 100) {
-                console.log('内容似乎还没加载完成，等待后重试...');
-                setTimeout(checkContent, 1000);
-                return;
-            }
-            
-            // 内容加载完成，开始检测
-            startDetection();
-        };
+        const content = getMainContent();
         
-        checkContent();
-    }, 1000);
+        // 只有当内容长度超过2000字时才自动显示提示
+        if (content && content.text.length > 2000) {
+            debug.log('初始化', '检测到长文本，显示提示');
+            createReadingModePrompt(content.element);
+        } else {
+            debug.log('初始化', '内容长度不足或未找到内容，不显示提示');
+        }
+    }, 1500);
 }
 
 // 检测逻辑
 function startDetection() {
-    console.log('开始检测页面内容...');
+    debug.group('检测');
+    debug.log('检测', '开始检查页面内容...');
     
-    // 检查是否启用了阅读模式
-    chrome.storage.local.get('settings', (data) => {
-        const settings = data.settings || {};
-        
-        if (settings.readingModeEnabled !== false) { // 默认启用
-            // 直接启动元素选择器
-            createElementSelector();
-        } else {
-            console.log('阅读模式已被禁用');
-        }
-    });
+    // 获取主要内容
+    const content = getMainContent();
+    
+    if (content && content.text.length > 100) {
+        debug.log('检测', '找到有效内容:', {
+            文本长度: content.text.length,
+            元素类型: content.element.tagName,
+            元素类名: content.element.className,
+            预览: content.text.substring(0, 100) + '...'
+        });
+        // 显示提示弹窗
+        createReadingModePrompt(content.element);
+    } else {
+        debug.warn('检测', '未找到足够长的内容');
+    }
+    debug.groupEnd();
 }
+
+// 监听来自插件的消息
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    debug.group('消息');
+    debug.log('消息', '收到消息:', request);
+    
+    if (request.action === 'checkContent') {
+        debug.log('消息', '收到检查内容请求');
+        startDetection();
+        sendResponse({success: true});
+    }
+    
+    debug.groupEnd();
+    return true;
+});
 
 // 创建元素选择器
 function createElementSelector() {
@@ -586,7 +779,7 @@ function createElementSelector() {
             z-index: 999998;
             background: rgba(0, 122, 255, 0.1);
             border: 2px solid #007AFF;
-            border-radius: 4px;
+            border-radius: 6px;
             display: none;
             transition: all 0.2s ease;
         `;
@@ -603,58 +796,15 @@ function createElementSelector() {
             z-index: 999999;
             background: #333;
             color: white;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 13px;
             display: none;
             transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
         `;
         document.body.appendChild(tooltip);
         return tooltip;
-    }
-
-    // 更新高亮位置
-    function updateHighlight(element) {
-        if (!element || !highlightElement) return;
-        const rect = element.getBoundingClientRect();
-        highlightElement.style.cssText = `
-            position: fixed;
-            pointer-events: none;
-            z-index: 999998;
-            background: rgba(0, 122, 255, 0.1);
-            border: 2px solid #007AFF;
-            border-radius: 4px;
-            top: ${rect.top}px;
-            left: ${rect.left}px;
-            width: ${rect.width}px;
-            height: ${rect.height}px;
-            display: block;
-            transition: all 0.2s ease;
-        `;
-    }
-
-    // 更新提示框位置
-    function updateTooltip(element, tooltip, event) {
-        if (!element || !tooltip) return;
-        const text = element.innerText.trim();
-        const wordCount = text.length;
-        const estimatedMinutes = Math.ceil(wordCount / 500); // 粗略估计阅读时间
-        tooltip.textContent = `${element.tagName.toLowerCase()} - ${wordCount}字 (约${estimatedMinutes}分钟) - 点击进入阅读模式`;
-        tooltip.style.cssText = `
-            position: fixed;
-            pointer-events: none;
-            z-index: 999999;
-            background: #333;
-            color: white;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            top: ${event.clientY + 20}px;
-            left: ${event.clientX + 10}px;
-            display: block;
-            transition: all 0.2s ease;
-            white-space: nowrap;
-        `;
     }
 
     // 创建取消按钮
@@ -669,21 +819,64 @@ function createElementSelector() {
             background: #f1f1f1;
             border: none;
             padding: 8px 16px;
-            border-radius: 4px;
+            border-radius: 6px;
             cursor: pointer;
             font-size: 14px;
             color: #333;
+            font-weight: 500;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             transition: all 0.2s ease;
         `;
         button.addEventListener('mouseover', () => {
-            button.style.background = '#ddd';
+            button.style.background = '#e4e4e4';
+            button.style.transform = 'translateY(-1px)';
         });
         button.addEventListener('mouseout', () => {
             button.style.background = '#f1f1f1';
+            button.style.transform = 'translateY(0)';
         });
         document.body.appendChild(button);
         return button;
+    }
+
+    // 更新高亮位置
+    function updateHighlight(element) {
+        if (!element || !highlightElement) return;
+        const rect = element.getBoundingClientRect();
+        highlightElement.style.display = 'block';
+        highlightElement.style.top = `${rect.top}px`;
+        highlightElement.style.left = `${rect.left}px`;
+        highlightElement.style.width = `${rect.width}px`;
+        highlightElement.style.height = `${rect.height}px`;
+    }
+
+    // 更新提示框位置
+    function updateTooltip(element, tooltip, event) {
+        if (!element || !tooltip) return;
+        const text = element.innerText.trim();
+        const wordCount = text.length;
+        const readingTime = estimateReadingTime(text);
+        tooltip.textContent = `${element.tagName.toLowerCase()} - ${wordCount}字 (约${readingTime}分钟) - 点击进入阅读模式`;
+        tooltip.style.display = 'block';
+        
+        // 计算提示框位置，确保不会超出屏幕
+        const rect = element.getBoundingClientRect();
+        const tooltipRect = tooltip.getBoundingClientRect();
+        let left = event.clientX + 10;
+        let top = event.clientY + 20;
+        
+        // 确保提示框不会超出右边界
+        if (left + tooltipRect.width > window.innerWidth) {
+            left = window.innerWidth - tooltipRect.width - 10;
+        }
+        
+        // 确保提示框不会超出下边界
+        if (top + tooltipRect.height > window.innerHeight) {
+            top = event.clientY - tooltipRect.height - 10;
+        }
+        
+        tooltip.style.left = `${left}px`;
+        tooltip.style.top = `${top}px`;
     }
 
     highlightElement = createHighlight();
@@ -701,9 +894,10 @@ function createElementSelector() {
         if (element === cancelButton || 
             element === highlightElement || 
             element === tooltip ||
-            element.closest('.smartreader-content-selector')) {
-            if (highlightElement) highlightElement.style.display = 'none';
-            if (tooltip) tooltip.style.display = 'none';
+            element.closest('.smartreader-prompt') ||
+            element.closest('.smartreader-save-prompt')) {
+            highlightElement.style.display = 'none';
+            tooltip.style.display = 'none';
             return;
         }
 
@@ -718,11 +912,11 @@ function createElementSelector() {
 
         if (container && container !== document.body && container.innerText) {
             hoveredElement = container;
-            if (highlightElement) updateHighlight(container);
-            if (tooltip) updateTooltip(container, tooltip, e);
+            updateHighlight(container);
+            updateTooltip(container, tooltip, e);
         } else {
-            if (highlightElement) highlightElement.style.display = 'none';
-            if (tooltip) tooltip.style.display = 'none';
+            highlightElement.style.display = 'none';
+            tooltip.style.display = 'none';
         }
     }
 
@@ -732,10 +926,7 @@ function createElementSelector() {
         e.preventDefault();
         e.stopPropagation();
 
-        // 清理选择器
         cleanup();
-        
-        // 启用阅读模式
         enableReadingMode(hoveredElement);
     }
 
